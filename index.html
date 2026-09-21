@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f97316">
+  <title>Amat Bajualan - Tes Bluetooth Printer</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial,sans-serif;background:#f5f5f5;color:#222}
+    .wrap{max-width:520px;margin:auto;padding:20px}
+    .card{background:white;border-radius:18px;padding:22px;box-shadow:0 5px 20px #00000012}
+    h1{margin:0 0 6px;font-size:24px}
+    .sub{color:#666;margin:0 0 20px}
+    button{width:100%;border:0;border-radius:13px;padding:15px;margin-top:10px;font-size:16px;font-weight:700;cursor:pointer}
+    #scan{background:#f97316;color:white}
+    #connect{background:#222;color:white}
+    #test{background:#16a34a;color:white}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    .status{margin:18px 0;padding:14px;border-radius:12px;background:#f3f4f6}
+    .ok{background:#dcfce7;color:#166534}
+    .warn{background:#fff7ed;color:#9a3412}
+    .box{margin-top:14px;padding:15px;border:1px solid #ddd;border-radius:12px}
+    .label{font-size:12px;color:#777}
+    .value{font-weight:700;margin-top:4px;word-break:break-word}
+    .log{font-size:13px;white-space:pre-wrap;color:#555;max-height:180px;overflow:auto}
+    .note{font-size:13px;line-height:1.5;color:#555;margin-top:18px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>🖨️ Tes Bluetooth Printer</h1>
+    <p class="sub">Amat Bajualan • MP-58X1</p>
+
+    <div id="status" class="status">
+      ⚪ Belum mencari printer.
+    </div>
+
+    <button id="scan">🔍 Cari Printer Bluetooth</button>
+    <button id="connect" disabled>🔗 Hubungkan Printer</button>
+    <button id="test" disabled>🧾 Tes Koneksi</button>
+
+    <div class="box">
+      <div class="label">Nama perangkat</div>
+      <div id="deviceName" class="value">Belum ada</div>
+    </div>
+
+    <div class="box">
+      <div class="label">ID perangkat</div>
+      <div id="deviceId" class="value">Belum ada</div>
+    </div>
+
+    <div class="box">
+      <div class="label">Log</div>
+      <div id="log" class="log">Belum ada aktivitas.</div>
+    </div>
+
+    <div class="note">
+      <b>Catatan:</b> website ini hanya untuk mengetes apakah MP-58X1
+      dapat ditemukan dan dihubungkan langsung melalui Web Bluetooth.
+      Belum mengirim data cetak pada tahap ini.
+    </div>
+  </div>
+</div>
+
+<script>
+let device = null;
+let server = null;
+
+const $ = id => document.getElementById(id);
+const statusBox = $("status");
+const logBox = $("log");
+
+function log(msg){
+  const time = new Date().toLocaleTimeString("id-ID");
+  logBox.textContent = `[${time}] ${msg}\n` + logBox.textContent;
+}
+
+function status(msg, type=""){
+  statusBox.className = "status " + type;
+  statusBox.textContent = msg;
+}
+
+function checkSupport(){
+  if (!("bluetooth" in navigator)) {
+    status("❌ Web Bluetooth tidak tersedia di browser ini.", "warn");
+    $("scan").disabled = true;
+    log("Gunakan Chrome Android dan buka website melalui HTTPS.");
+    return false;
+  }
+  return true;
+}
+
+$("scan").onclick = async () => {
+  if (!checkSupport()) return;
+
+  try {
+    status("🔍 Memilih perangkat Bluetooth...", "warn");
+    log("Membuka pemilih perangkat Bluetooth.");
+
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true
+    });
+
+    $("deviceName").textContent = device.name || "(nama tidak tersedia)";
+    $("deviceId").textContent = device.id || "(ID tidak tersedia)";
+    $("connect").disabled = false;
+
+    status("✅ Printer/perangkat ditemukan.", "ok");
+    log("Perangkat dipilih: " + (device.name || "Tanpa nama"));
+
+    device.addEventListener("gattserverdisconnected", () => {
+      status("⚠️ Perangkat terputus.", "warn");
+      $("test").disabled = true;
+      log("GATT terputus.");
+    });
+
+  } catch (err) {
+    status("❌ Tidak ada perangkat yang dipilih.", "warn");
+    log("Gagal memilih: " + err.message);
+  }
+};
+
+$("connect").onclick = async () => {
+  if (!device) return;
+
+  try {
+    if (!device.gatt) throw new Error("Perangkat tidak menyediakan GATT.");
+
+    status("🔗 Mencoba menghubungkan...", "warn");
+    log("Mencoba koneksi GATT.");
+
+    server = await device.gatt.connect();
+
+    status("🟢 TERHUBUNG via Web Bluetooth!", "ok");
+    $("test").disabled = false;
+    log("Koneksi GATT berhasil.");
+
+    try {
+      const services = await server.getPrimaryServices();
+      log("Jumlah service yang terbaca: " + services.length);
+      services.forEach((s, i) => {
+        log(`Service ${i+1}: ${s.uuid}`);
+      });
+    } catch (e) {
+      log("Service tidak dapat dibaca: " + e.message);
+    }
+
+  } catch (err) {
+    status("❌ Tidak bisa terhubung.", "warn");
+    log("Koneksi gagal: " + err.message);
+  }
+};
+
+$("test").onclick = async () => {
+  if (!server) return;
+
+  try {
+    const services = await server.getPrimaryServices();
+    status("🟢 Bluetooth terhubung. Service terdeteksi: " + services.length, "ok");
+    log("Tes berhasil. Selanjutnya kita perlu mencari service/characteristic printer untuk mengirim perintah cetak.");
+  } catch (err) {
+    log("Tes service gagal: " + err.message);
+  }
+};
+
+checkSupport();
+</script>
+</body>
+</html>
